@@ -21,6 +21,7 @@ import net.sourceforge.kolmafia.AdventureResult;
 import net.sourceforge.kolmafia.AdventureResult.AdventureLongCountResult;
 import net.sourceforge.kolmafia.AreaCombatData;
 import net.sourceforge.kolmafia.AscensionClass;
+import net.sourceforge.kolmafia.AscensionPath.Path;
 import net.sourceforge.kolmafia.EdServantData;
 import net.sourceforge.kolmafia.FamiliarData;
 import net.sourceforge.kolmafia.KoLAdventure;
@@ -1678,7 +1679,7 @@ public class FightRequest extends GenericRequest {
     KoLAdventure location = KoLAdventure.lastVisitedLocation();
     Environment environment = location != null ? location.getEnvironment() : null;
 
-    if (environment != null && !environment.isUnderwater()) {
+    if (environment != null && !location.isUnderwater()) {
       KoLmafia.updateDisplay(MafiaState.ABORT, "This skill is useless out of water.");
       return true;
     }
@@ -2244,10 +2245,7 @@ public class FightRequest extends GenericRequest {
 
       QuestManager.updateQuestFightStarted(responseText, monsterName);
 
-      LocketManager.parseFight(monster, responseText);
-
-      // http://kol.coldfront.net/thekolwiki/index.php/Encounter#Encounter_Flowchart (image link
-      // there
+      // https://wiki.kingdomofloathing.com/Encounter#Encounter_Flowchart (image link there
       // is regularly updated) shows the order is Digitize, Arrow, Enamorang, so check in that order
       // Bodyguard chats are entirely separate, so those come before everything else.
       if (EncounterManager.isBodyguardEncounter(responseText)) {
@@ -2314,6 +2312,8 @@ public class FightRequest extends GenericRequest {
         Preferences.setString("spookyVHSTapeMonster", "");
       } else if (EncounterManager.isMimeographEncounter(responseText)) {
         EncounterManager.ignoreSpecialMonsters();
+      } else if (LocketManager.isLocketFight(responseText)) {
+        LocketManager.parseFight(monster);
       }
 
       // Increment Turtle Blessing counter
@@ -3596,7 +3596,7 @@ public class FightRequest extends GenericRequest {
           // <name> mutters dark secrets under his breath, and
           // you feel time slow down.
           KoLAdventure lastLocation = KoLAdventure.lastVisitedLocation();
-          boolean underwater = lastLocation != null && lastLocation.getEnvironment().isUnderwater();
+          boolean underwater = lastLocation != null && lastLocation.isUnderwater();
           Preferences.increment("_gibbererCharge", underwater ? 2 : 1, 15, true);
           if (responseText.contains("you feel time slow down")) {
             Preferences.increment("_gibbererAdv", 1);
@@ -4201,6 +4201,13 @@ public class FightRequest extends GenericRequest {
         Preferences.decrement("_spookyJellyUses");
       }
 
+      // With your mixed berry jelly-coated hands, you are able to grab everything your foe was
+      // carrying!
+      if (Preferences.getInteger("mixedBerryJellyUses") > 0
+          && responseText.contains("With your mixed berry jelly-coated hands")) {
+        Preferences.decrement("mixedBerryJellyUses");
+      }
+
       if (KoLCharacter.hasEquipped(ItemPool.SNOW_SUIT, Slot.FAMILIAR)) {
         if (Preferences.getInteger("_snowSuitCount") < 75
             && Preferences.increment("_snowSuitCount") % 5 == 0) {
@@ -4340,6 +4347,22 @@ public class FightRequest extends GenericRequest {
             momCount++;
           }
           Preferences.increment("momSeaMonkeeProgress", momCount, 40, false);
+        }
+        case "Nautical Seaceress" -> {
+          // You feel your dolphin whistling endurance improve.
+          Path path = Path.UNDER_THE_SEA;
+          int points = KoLCharacter.isHardcore() ? 2 : 1;
+          if (responseText.contains("dolphin whistling endurance")) {
+            path.incrementPoints(points);
+          } else if (responseText.contains("durable dolphin whistle")) {
+            // If you don't have a dolphin whistle, the message is
+            // omitted and you receive one.
+            path.setPoints(points);
+          } else {
+            // I don't know if the message is omitted if you are at max points,
+            // but it seems logical
+            path.setPoints(11);
+          }
         }
       }
 
@@ -6413,7 +6436,7 @@ public class FightRequest extends GenericRequest {
 
     /// node-specific processing
     if (name.equals("script")) {
-      Matcher m = CLEESH_PATTERN.matcher(node.wholeText());
+      Matcher m = CLEESH_PATTERN.matcher(node.data());
       if (!m.find()) {
         return;
       }
@@ -7214,6 +7237,8 @@ public class FightRequest extends GenericRequest {
       FightRequest.logText(str, status);
     }
 
+    FightRequest.handleSeadent(str, status);
+
     boolean VYKEAaction = status.VYKEACompanion != null && str.contains(status.VYKEACompanion);
     if (VYKEAaction && status.logFamiliar) {
       // VYKEA companion action
@@ -7658,6 +7683,18 @@ public class FightRequest extends GenericRequest {
     FightRequest.logText(str, status);
     if (str.contains("You look down and find a Volcoino!")) {
       Preferences.setBoolean("_luckyGoldRingVolcoino", true);
+    }
+  }
+
+  private static void handleSeadent(String str, TagStatus status) {
+    if (!str.contains(
+        "tiny bits of their constituent construct parts are attracted to the magic of your spear")) {
+      return;
+    }
+    Preferences.increment("seadentConstructKills");
+    FightRequest.logText(str, status);
+    if (str.contains("Whoa, they formed a whole new tine!")) {
+      Preferences.increment("seadentLevel");
     }
   }
 
@@ -9845,6 +9882,12 @@ public class FightRequest extends GenericRequest {
         if (responseText.contains("You punt your opponent over the horizon")
             || skillRunawaySuccess) {
           BanishManager.banishMonster(monster, Banisher.PUNT_WEREPROF);
+        }
+      }
+      case SkillPool.SEADENT_LIGHTNING -> {
+        if (responseText.contains("A bolt of lightning arcs out and burns your foe to ash.")
+            || skillSuccess) {
+          BanishManager.banishMonster(monster, Banisher.SEADENT_LIGHTNING);
         }
       }
       case SkillPool.POCKET_CRUMBS -> {
