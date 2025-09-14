@@ -249,6 +249,10 @@ public abstract class MallPriceManager {
 
   /** Utility method used to search the mall for a specific item. */
   public static List<PurchaseRequest> getSavedSearch(Integer id, final int needed) {
+    if(Preferences.getBoolean("forceMallSearch")) {
+      return null;
+    }
+
     // See if we have a saved search for this id
     List<PurchaseRequest> results = MallPriceManager.mallSearches.get(id);
 
