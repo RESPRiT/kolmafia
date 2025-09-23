@@ -507,7 +507,7 @@ public abstract class MallPriceManager {
 
     long price = MallPriceManager.mallPrices.getOrDefault(itemId, 0L);
 
-    if (price == 0L) {
+    if (price == 0L || Preferences.getBoolean("forceMallSearch")) {
       AdventureResult search = ItemPool.get(itemId, NTH_CHEAPEST_COUNT);
       MallPriceManager.searchMall(search);
       price = MallPriceManager.mallPrices.getOrDefault(itemId, 0L);
@@ -617,7 +617,7 @@ public abstract class MallPriceManager {
     }
 
     long price = MallPriceDatabase.getPrice(itemId);
-    if (MallPriceDatabase.getAge(itemId) > maxAge) {
+    if (MallPriceDatabase.getAge(itemId) > maxAge || Preferences.getBoolean("forceMallSearch")) {
       MallPriceManager.flushCache(itemId);
       MallPriceManager.mallPrices.remove(itemId);
       price = 0;
@@ -641,7 +641,7 @@ public abstract class MallPriceManager {
           continue;
         }
         long price = MallPriceDatabase.getPrice(itemId);
-        if (price > 0 && MallPriceDatabase.getAge(itemId) <= maxAge) {
+        if (price > 0 && MallPriceDatabase.getAge(itemId) <= maxAge && !Preferences.getBoolean("forceMallSearch")) {
           continue;
         }
         if (MallPriceManager.mallPrices.getOrDefault(itemId, 0L) == 0) {
